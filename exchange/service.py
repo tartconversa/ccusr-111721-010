@@ -2,6 +2,7 @@ from .audit import history
 from .catalog import Catalog
 from .db import connect
 from .delivery import Delivery
+from .disposal import Disposal
 from .grants import Grants
 from .policy import Policies
 from .products import Products
@@ -15,6 +16,7 @@ class Exchange:
         self.policies = Policies(self.connection)
         self.products = Products(self.connection)
         self.delivery = Delivery(self.connection)
+        self.disposal = Disposal(self.connection)
 
     def history(self, subject):
         return history(self.connection, subject)

@@ -8,19 +8,35 @@ class Catalog:
     def __init__(self, connection):
         self.connection = connection
 
-    def register(self, source_id, owner, jurisdiction, classification, fields, at):
+    def register(self, source_id, owner, jurisdiction, classification, fields, at, retention_until=None):
         if not fields or len({field[0] for field in fields}) != len(fields):
             raise ValueError("来源字段缺失或重复")
         with self.connection:
             self.connection.execute(
-                "INSERT INTO sources(id,owner,jurisdiction,classification) VALUES(?,?,?,?)",
-                (source_id, owner, jurisdiction, classification),
+                "INSERT INTO sources(id,owner,jurisdiction,classification,retention_until) VALUES(?,?,?,?,?)",
+                (source_id, owner, jurisdiction, classification, retention_until),
             )
             self.connection.executemany(
                 "INSERT INTO fields(source_id,name,meaning,kind,sensitive) VALUES(?,?,?,?,?)",
                 [(source_id, name, meaning, kind, int(sensitive)) for name, meaning, kind, sensitive in fields],
             )
-            write(self.connection, at, owner, "source.register", source_id, {"jurisdiction": jurisdiction})
+            write(self.connection, at, owner, "source.register", source_id,
+                  {"jurisdiction": jurisdiction, "retention_until": retention_until})
+
+    def withdraw(self, source_id, at, actor):
+        row = self.connection.execute(
+            "SELECT withdrawn_at,retention_until FROM sources WHERE id=?", (source_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(source_id)
+        if row["withdrawn_at"]:
+            return
+        with self.connection:
+            self.connection.execute(
+                "UPDATE sources SET active=0, withdrawn_at=? WHERE id=?", (at, source_id)
+            )
+            write(self.connection, at, actor, "source.withdraw", source_id,
+                  {"retention_until": row["retention_until"]})
 
     def ingest(self, asset_id, source_id, payload, at):
         source = self.connection.execute("SELECT * FROM sources WHERE id=?", (source_id,)).fetchone()
